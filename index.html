@@ -120,7 +120,7 @@
     </div>
 
     <div class="info-box" id="info-text">
-        💡 <strong>Mode Automatique :</strong> Saisissez le <strong>Salaire Brut</strong> (celui de la fiche de paie). L'outil ajoute automatiquement <strong>+45%</strong> de charges pour estimer le coût réel pour l'entreprise.
+        💡 <strong>Mode Automatique :</strong> Saisissez le <strong>Salaire Brut</strong>. L'outil ajoute automatiquement <strong>+45%</strong> de charges. L'export Excel contiendra les formules de calcul !
     </div>
 
     <div class="table-container">
@@ -280,9 +280,9 @@
                     <thead>
                         <tr style="background-color:#f3f4f6; border-bottom: 2px solid #000;">
                             <th style="text-align:left; padding:10px;">Poste</th>
-                            <th style="text-align:right; padding:10px;">Salaire Brut (Saisi)</th>
-                            <th style="text-align:right; padding:10px;">Coût Chargé (Calculé)</th>
-                            <th style="text-align:center; padding:10px;">Volume</th>
+                            <th style="text-align:right; padding:10px;">Salaire Brut</th>
+                            <th style="text-align:right; padding:10px;">Coût Chargé (Est.)</th>
+                            <th style="text-align:center; padding:10px;">Temps</th>
                             <th style="text-align:right; padding:10px;">Total</th>
                         </tr>
                     </thead>
@@ -307,7 +307,7 @@
         
         const opt = {
             margin: 0.5,
-            filename: 'Budget_RH.pdf',
+            filename: 'Budget_RH_Brut_Charge.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2 },
             jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
@@ -315,14 +315,14 @@
         html2pdf().set(opt).from(element).save();
     }
 
-    // --- EXCEL ---
+    // --- EXCEL AVEC FORMULES ---
     function downloadExcel() {
-        let data = [];
-        
         // En-têtes adaptés au mode
         const headerUnit = currentMode === 'hour' ? 'Horaire' : 'Journalier';
         const headerTime = currentMode === 'hour' ? 'Heures' : 'Jours';
         
+        // Structure des données avec Formules
+        let data = [];
         data.push([
             "Poste / Rôle", 
             `Salaire Brut ${headerUnit}`, 
@@ -331,23 +331,33 @@
             "Total Budget"
         ]);
 
-        document.querySelectorAll('#tableBody tr').forEach(row => {
+        const rows = document.querySelectorAll('#tableBody tr');
+        rows.forEach((row, index) => {
+            // L'index Excel commence à 1, mais la ligne 1 est l'en-tête, donc la première ligne de donnée est 2.
+            const excelRow = index + 2; 
+
             let role = row.querySelector('.input-role').value;
             let brut = parseFloat(row.querySelector('.input-brut').value) || 0;
-            // On recalcule ici pour être sûr d'avoir la valeur numérique pour Excel
-            let loaded = brut * LOADED_COEFF;
             let time = parseFloat(row.querySelector('.input-time').value) || 0;
-            let total = loaded * time;
             
-            data.push([role, brut, loaded, time, total]);
+            // Construction de la ligne avec FORMULES
+            // B = Brut, C = Chargé, D = Temps, E = Total
+            let rowData = [
+                role,
+                { t: 'n', v: brut }, // Valeur brute numérique
+                { t: 'n', f: `B${excelRow}*${LOADED_COEFF}` }, // Formule : Brut * 1.45
+                { t: 'n', v: time }, // Valeur temps numérique
+                { t: 'n', f: `C${excelRow}*D${excelRow}` } // Formule : Chargé * Temps
+            ];
+            
+            data.push(rowData);
         });
 
-        // Ligne Total
-        let grandTotalStr = document.getElementById('grandTotal').innerText;
-        // Nettoyage de la chaine (enlever € et espace insécable) pour Excel si besoin, 
-        // ou on laisse vide et l'étudiant fera sa somme sur Excel.
-        // Ici on met une ligne texte pour le total
-        data.push(["", "", "", "TOTAL GÉNÉRAL", parseFloat(grandTotalStr.replace(/\s|€/g, '').replace(',', '.'))]);
+        // Ligne Total Général
+        const lastRow = rows.length + 1; // Dernière ligne de données
+        const totalFormula = `SUM(E2:E${lastRow})`; // Somme de la colonne E
+        
+        data.push(["", "", "", "TOTAL GÉNÉRAL", { t: 'n', f: totalFormula }]);
 
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(data);
