@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculatrice Coût Main d'Œuvre - BTS Com</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #8b5cf6; /* Violet pour changer un peu (RH/Créa) */
+            --bg: #f3f4f6;
+            --surface: #ffffff;
+            --text-main: #1f2937;
+            --border: #e5e7eb;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 900px;
+            background: var(--surface);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HEADER */
+        .header { background-color: #1e1b4b; color: white; padding: 1.5rem; text-align: center; }
+        h1 { margin: 0; font-size: 1.5rem; }
+        
+        /* CONTROLS */
+        .controls { 
+            padding: 15px; background: #f8fafc; border-bottom: 1px solid var(--border); 
+            display: flex; justify-content: center; gap: 20px; align-items: center;
+        }
+        
+        .mode-switch {
+            display: flex; background: #e2e8f0; border-radius: 8px; padding: 4px;
+        }
+        .mode-btn {
+            padding: 8px 16px; border: none; background: transparent; cursor: pointer; border-radius: 6px; font-weight: 600; color: #64748b;
+        }
+        .mode-btn.active { background: white; color: var(--primary); shadow: 0 1px 2px rgba(0,0,0,0.1); }
+
+        /* TABLEAU */
+        .table-container { padding: 1rem; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        th { background-color: #f1f5f9; text-align: left; padding: 12px; font-weight: 600; color: #475569; border-bottom: 2px solid var(--border); }
+        td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+
+        input, select {
+            width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;
+            font-family: inherit;
+        }
+        input[type="number"] { text-align: right; font-weight: 600; }
+        
+        .total-row td { background-color: #f8fafc; font-weight: bold; border-top: 2px solid #cbd5e1; font-size: 1.1rem; }
+
+        /* BOUTONS */
+        .btn-delete { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 1.2rem; }
+        .btn-delete:hover { color: #ef4444; }
+        
+        .actions-bar { padding: 1rem; display: flex; justify-content: space-between; background-color: #f8fafc; border-top: 1px solid var(--border); }
+        
+        button.action-btn { border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+        .btn-add { background-color: var(--primary); color: white; }
+        .btn-pdf { background-color: white; border: 1px solid #D32F2F; color: #D32F2F; }
+
+        /* INFO BOX (Pédagogie) */
+        .info-box {
+            margin: 15px; padding: 15px; background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 4px; font-size: 0.9rem; color: #1e40af;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="header">
+        <h1>👥 Calculatrice Main d'Œuvre</h1>
+        <div style="font-size:0.9rem; opacity:0.8; margin-top:5px;">Estimation des coûts RH / Prestations Intellectuelles</div>
+    </div>
+
+    <div class="controls">
+        <span style="font-weight:bold; font-size:0.9rem;">Unité de temps :</span>
+        <div class="mode-switch">
+            <button class="mode-btn active" id="btn-hour" onclick="setMode('hour')">Heures</button>
+            <button class="mode-btn" id="btn-day" onclick="setMode('day')">Jours (TJM)</button>
+        </div>
+    </div>
+
+    <div class="info-box" id="info-text">
+        💡 <strong>Info BTS :</strong> En mode "Heures", utilisez le coût horaire chargé (Salaire + Charges). En mode "Jours", on parle de TJM (Taux Journalier Moyen), souvent utilisé pour les freelances ou la facturation agence.
+    </div>
+
+    <div class="table-container">
+        <table id="rhTable">
+            <thead>
+                <tr>
+                    <th style="width:30%">Rôle / Poste</th>
+                    <th style="width:20%" id="col-rate">Coût Horaire (€)</th>
+                    <th style="width:20%" id="col-time">Heures prévues</th>
+                    <th style="width:20%; text-align:right;">Total HT</th>
+                    <th style="width:10%"></th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+            <tfoot>
+                <tr class="total-row">
+                    <td colspan="3" style="text-align:right; padding-right:20px;">COÛT TOTAL MAIN D'ŒUVRE :</td>
+                    <td style="text-align:right; color: var(--primary);" id="grandTotal">0,00 €</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <div class="actions-bar">
+        <button class="action-btn btn-add" onclick="addRow()"><span>+</span> Ajouter un poste</button>
+        <button class="action-btn btn-pdf" onclick="generatePDF()">📄 Exporter en PDF</button>
+    </div>
+</div>
+
+<script>
+    let currentMode = 'hour'; // 'hour' ou 'day'
+
+    document.addEventListener('DOMContentLoaded', () => { addRow(); });
+
+    function setMode(mode) {
+        currentMode = mode;
+        // Mise à jour visuelle des boutons
+        document.getElementById('btn-hour').className = mode === 'hour' ? 'mode-btn active' : 'mode-btn';
+        document.getElementById('btn-day').className = mode === 'day' ? 'mode-btn active' : 'mode-btn';
+        
+        // Mise à jour des en-têtes
+        if (mode === 'hour') {
+            document.getElementById('col-rate').innerText = "Coût Horaire (€)";
+            document.getElementById('col-time').innerText = "Heures prévues";
+            document.getElementById('info-text').innerHTML = "💡 <strong>Info BTS :</strong> En mode <em>Heures</em>, utilisez le coût horaire chargé (Salaire + Charges).";
+        } else {
+            document.getElementById('col-rate').innerText = "TJM (€ / Jour)";
+            document.getElementById('col-time').innerText = "Jours prévus";
+            document.getElementById('info-text').innerHTML = "💡 <strong>Info BTS :</strong> Le <em>TJM</em> (Taux Journalier Moyen) inclut le salaire, les charges, les frais de structure et la marge de l'agence.";
+        }
+        recalculateAll();
+    }
+
+    function addRow() {
+        const tbody = document.getElementById('tableBody');
+        const row = document.createElement('tr');
+        
+        // Liste de postes typiques BTS Com
+        const roles = `
+            <option value="">-- Choisir un poste --</option>
+            <option value="Chef de Projet">Chef de Projet</option>
+            <option value="Directeur Artistique (DA)">Directeur Artistique (DA)</option>
+            <option value="Graphiste / Exé">Graphiste / Exé</option>
+            <option value="Community Manager">Community Manager</option>
+            <option value="Développeur Web">Développeur Web</option>
+            <option value="Concepteur Rédacteur">Concepteur Rédacteur</option>
+            <option value="Stagiaire">Stagiaire</option>
+            <option value="Autre">Autre (Freelance...)</option>
+        `;
+
+        row.innerHTML = `
+            <td><select class="input-role">${roles}</select></td>
+            <td><input type="number" class="input-rate" placeholder="0" oninput="calculateRow(this)"></td>
+            <td><input type="number" class="input-time" placeholder="0" oninput="calculateRow(this)"></td>
+            <td style="text-align:right; font-weight:bold;" class="cell-total">0,00 €</td>
+            <td style="text-align:center;"><button class="btn-delete" onclick="deleteRow(this)">×</button></td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    function deleteRow(btn) {
+        const row = btn.parentNode.parentNode;
+        if (document.getElementById('tableBody').rows.length > 1) { row.remove(); recalculateAll(); }
+        else { 
+            row.querySelector('.input-role').value = "";
+            row.querySelectorAll('input').forEach(i => i.value = ''); 
+            recalculateAll(); 
+        }
+    }
+
+    function calculateRow(inputElement) {
+        const row = inputElement.parentNode.parentNode;
+        const rate = parseFloat(row.querySelector('.input-rate').value) || 0;
+        const time = parseFloat(row.querySelector('.input-time').value) || 0;
+        const total = rate * time;
+        
+        row.querySelector('.cell-total').innerText = total.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' €';
+        updateGrandTotal();
+    }
+
+    function recalculateAll() {
+        document.querySelectorAll('#tableBody tr').forEach(row => {
+            const input = row.querySelector('.input-rate'); // Juste pour récupérer la ligne
+            if(input) calculateRow(input);
+        });
+    }
+
+    function updateGrandTotal() {
+        let grandTotal = 0;
+        document.querySelectorAll('#tableBody tr').forEach(row => {
+            const rate = parseFloat(row.querySelector('.input-rate').value) || 0;
+            const time = parseFloat(row.querySelector('.input-time').value) || 0;
+            grandTotal += (rate * time);
+        });
+        document.getElementById('grandTotal').innerText = grandTotal.toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' €';
+    }
+
+    // --- GENERATION PDF PROPRE (METHODE RAPPORT VIRTUEL) ---
+    function generatePDF() {
+        // 1. Récupérer les données
+        let rowsHTML = "";
+        const unitPrice = currentMode === 'hour' ? ' / h' : ' / jour';
+        const unitTime = currentMode === 'hour' ? ' heures' : ' jours';
+        
+        document.querySelectorAll('#tableBody tr').forEach(row => {
+            const roleSelect = row.querySelector('.input-role');
+            const role = roleSelect.value || "Non défini";
+            const rate = (parseFloat(row.querySelector('.input-rate').value) || 0).toLocaleString('fr-FR');
+            const time = (parseFloat(row.querySelector('.input-time').value) || 0).toLocaleString('fr-FR');
+            const total = row.querySelector('.cell-total').innerText;
+
+            rowsHTML += `
+                <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 10px; font-weight:bold;">${role}</td>
+                    <td style="padding: 10px; text-align:right;">${rate} €${unitPrice}</td>
+                    <td style="padding: 10px; text-align:right;">${time} ${unitTime}</td>
+                    <td style="padding: 10px; text-align:right; font-weight:bold;">${total}</td>
+                </tr>
+            `;
+        });
+
+        const grandTotal = document.getElementById('grandTotal').innerText;
+
+        // 2. Construire le HTML virtuel (Noir et Blanc)
+        const content = `
+            <div style="padding: 20px; font-family: Arial, sans-serif; color: #000;">
+                <h1 style="text-align:center; color:#1e1b4b; margin-bottom: 5px;">Budget Main d'Œuvre</h1>
+                <div style="text-align:center; font-size:12px; color:#666; margin-bottom:30px;">
+                    Mode de calcul : ${currentMode === 'hour' ? 'Horaire' : 'Journalier (TJM)'}
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; font-size:12px;">
+                    <thead>
+                        <tr style="background-color:#f3f4f6; border-bottom: 2px solid #000;">
+                            <th style="text-align:left; padding:10px;">Poste / Rôle</th>
+                            <th style="text-align:right; padding:10px;">Coût Unitaire</th>
+                            <th style="text-align:right; padding:10px;">Temps prévu</th>
+                            <th style="text-align:right; padding:10px;">Total HT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHTML}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color:#f3f4f6; border-top: 2px solid #000;">
+                            <td colspan="3" style="text-align:right; padding:15px; font-weight:bold; text-transform:uppercase;">Total Estimé :</td>
+                            <td style="text-align:right; padding:15px; font-size:16px; font-weight:bold;">${grandTotal}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <div style="margin-top:40px; border:1px solid #ccc; padding:15px; font-size:11px;">
+                    <strong>Note :</strong> Cette estimation est basée sur les coûts saisis. 
+                    ${currentMode === 'day' ? "Les montants incluent la marge d'agence (TJM)." : "Les montants correspondent au coût interne."}
+                </div>
+            </div>
+        `;
+
+        // 3. Générer
+        const element = document.createElement('div');
+        element.innerHTML = content;
+        
+        const opt = {
+            margin:       0.5,
+            filename:     'Budget_Main_Oeuvre.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2 },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+        };
+
+        html2pdf().set(opt).from(element).save();
+    }
+</script>
+
+</body>
+</html>
